@@ -23,6 +23,7 @@ type fakeAPI struct {
 	paths   []string
 	failOSV bool
 	osv500  bool
+	failNVD bool
 }
 
 func testdataPath(t *testing.T, parts ...string) string {
@@ -96,6 +97,10 @@ func (f *fakeAPI) handle(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(readFixture(f.t, osvFixtureFor(req.Package.Ecosystem, req.Package.Name, req.Version)...))
 
 	case r.URL.Path == "/rest/json/cves/2.0":
+		if f.failNVD {
+			http.Error(w, "nvd down", http.StatusServiceUnavailable)
+			return
+		}
 		id := r.URL.Query().Get("cveId")
 		p := testdataPath(f.t, "nvd", id+".json")
 		if _, err := os.Stat(p); err != nil {
@@ -131,4 +136,10 @@ func (f *fakeAPI) Paths() []string {
 	out := make([]string, len(f.paths))
 	copy(out, f.paths)
 	return out
+}
+
+func (f *fakeAPI) ResetPaths() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.paths = nil
 }

@@ -113,6 +113,8 @@ func Run(ctx context.Context, opt Options) (*model.Report, error) {
 
 	r.rep.Sources = r.sourceStatuses()
 	r.classify(now)
+	// NEW 判定必須在 classify 之後（項目已分類）、fillSummary 之前（要統計 NEW 數）。
+	r.applyNewState()
 	r.rep.Limitations = r.limitations()
 	r.fillSummary()
 
@@ -322,6 +324,18 @@ func (r *runner) limitations() []string {
 		"crates.io / npm 的版本比較是 Phase 2 功能，目前同樣只列候選。",
 		"只有 CVSS_V4 評分的項目不計算分數，只顯示 vector 原文。",
 		"KEV（是否已遭實際利用）、EPSS（被利用機率）與 deps.dev（最新版本）是 Phase 2 功能，本次未查詢。",
+	}
+
+	// 語言執行環境的階段性限制
+	for _, lang := range r.cfg.Languages {
+		if spec, ok := model.Languages[lang.Name]; ok && !spec.VulnSupported {
+			lim = append(lim, spec.Name+"：只輸出 EOL 與版本落後狀態，弱點清單是 Phase 2 功能。")
+		}
+	}
+	if r.nvdStatus.Enabled && r.nvdStatus.Queries > 0 {
+		lim = append(lim,
+			"NVD 補分數使用的 CVSS 欄位路徑尚未以真實請求驗證過（見 docs/decisions.md §0 / §6），"+
+				"第一次在真實網路上執行時請人工核對一次。")
 	}
 	if r.rep.Offline {
 		lim = append(lim, "本次以 --offline 執行，只使用快取；「無資料」區塊的對象這次完全沒有被檢查。")
