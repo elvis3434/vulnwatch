@@ -268,3 +268,12 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/vulnwatch
   [docs/decisions.md](docs/decisions.md) §0 與 §6。
 - `testdata/` 的 fixture 是手寫的（開發環境的網路政策封鎖了全部弱點 API），
   重新錄製方式見 [testdata/README.md](testdata/README.md)。
+
+## 授權
+
+MIT License，見 [LICENSE](LICENSE)。Copyright (c) 2026 eLvis。
+
+MIT 的免責聲明（LICENSE 最後一段全大寫的部分）說明本軟體「以現狀提供、不附任何
+擔保」。另外要特別說明的是：**本工具不保證弱點清單完整**，各資料庫的覆蓋範圍不同，
+詳見上方「各來源的覆蓋限制與誤報」—— 這是產品行為的說明，與授權條款是兩件事，
+報表本身也會在「已知限制」區重述。
