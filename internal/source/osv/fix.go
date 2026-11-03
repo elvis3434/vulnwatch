@@ -56,7 +56,7 @@ func SelectFix(a Advisory, ecosystem, name, version string, cmp model.Comparer) 
 		return model.Fix{
 			Kind:       model.FixKindCandidates,
 			Candidates: allFixed,
-			Note:       ecosystem + " 不做版本比較，請自行確認對應的版本線（規劃 §3.3）",
+			Note:       ecosystem + " 不做版本比較，請自行確認對應的版本線",
 		}
 	}
 

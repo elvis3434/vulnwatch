@@ -31,7 +31,7 @@ func sampleReport() *model.Report {
 			Aliases:  []string{"CVE-2021-44228"},
 			Summary:  "Remote code injection in Log4j",
 			Severity: model.Severity{Level: model.LevelCritical, Score: 10.0, HasScore: true, Source: model.SevSourceCVSS31OSV, Vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H", VectorType: "CVSS_V3"},
-			Fix:      model.Fix{Kind: model.FixKindCandidates, Candidates: []string{"2.3.1", "2.12.2", "2.15.0"}, Note: "Maven 不做版本比較"},
+			Fix:      model.Fix{Kind: model.FixKindCandidates, Candidates: []string{"2.3.1", "2.12.2", "2.15.0"}, Note: "Maven 不做版本比較，請自行確認對應的版本線"},
 			Source:   "OSV",
 			New:      model.NewStateYes,
 		}},
@@ -142,8 +142,12 @@ func TestMarkdownShowsSeveritySource(t *testing.T) {
 func TestMarkdownShowsFixStates(t *testing.T) {
 	md := Markdown(sampleReport())
 	// 規劃 §3.3：三種狀態都要能表達
-	if !strings.Contains(md, "未做版本比較") {
-		t.Error("候選版本狀態必須標註未做版本比較")
+	if !strings.Contains(md, "2.3.1") || !strings.Contains(md, "2.15.0") {
+		t.Error("候選版本狀態必須列出全部候選版本")
+	}
+	// 候選狀態的原因取自 Note，不可寫死成「未做版本比較」
+	if !strings.Contains(md, "Maven 不做版本比較") {
+		t.Error("候選版本狀態必須標註真正的原因")
 	}
 	if !strings.Contains(md, "0.23.0") {
 		t.Error("確定值狀態必須顯示版本")

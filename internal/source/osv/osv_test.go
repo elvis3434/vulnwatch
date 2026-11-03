@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/elvis3434/vulnwatch/internal/httpx"
@@ -371,5 +372,107 @@ func TestPrimaryReferencesPrefersAdvisory(t *testing.T) {
 	refs := PrimaryReferences(adv, 3)
 	if len(refs) != 2 || refs[0] != "https://example.com/advisory" {
 		t.Fatalf("PrimaryReferences = %v，預期 ADVISORY 優先且略過空 URL", refs)
+	}
+}
+
+// TestResolveSeverityQualitativeWithExtraFields 是回歸測試：
+// database_specific 裡除了 severity 以外還有別的欄位（GHSA 幾乎一定有
+// github_reviewed: true、cwe_ids 等）時，第 2 層質性等級回退仍必須生效。
+//
+// 曾經的 bug：databaseSpecific 把 github_reviewed 宣告成 string，
+// 但它實際是 bool，json.Unmarshal 會回傳 UnmarshalTypeError，
+// 導致整個 database_specific 被當成無法解析 —— 凡是沒有 CVSS_V3 的
+// GHSA 都會silently 掉到 UNKNOWN。
+func TestResolveSeverityQualitativeWithExtraFields(t *testing.T) {
+	adv := Advisory{
+		ID: "GHSA-with-extra-fields",
+		DatabaseSpecific: json.RawMessage(`{
+			"cwe_ids": ["CWE-200"],
+			"severity": "MODERATE",
+			"github_reviewed": true,
+			"github_reviewed_at": "2024-06-17T18:30:21Z",
+			"nvd_published_at": null
+		}`),
+	}
+	sev := ResolveSeverity(adv)
+	if sev.Level != model.LevelMedium {
+		t.Fatalf("Severity.Level = %v，預期 MEDIUM（database_specific 有其他欄位時，"+
+			"第 2 層回退仍必須生效）", sev.Level)
+	}
+	if sev.Source != model.SevSourceGHSA {
+		t.Errorf("Severity.Source = %q，預期 %q", sev.Source, model.SevSourceGHSA)
+	}
+}
+
+// TestResolveSeverityQualitativeFromRealFixtureShape 用與 testdata 相同的
+// database_specific 形狀驗證（fixture 裡就帶著 github_reviewed）。
+func TestResolveSeverityQualitativeFromRealFixtureShape(t *testing.T) {
+	advs := loadAdvisories(t, filepath.Join("osv", "pypi_urllib3_1.26.5.json"))
+	adv := findAdvisory(t, advs, "GHSA-34jh-p97f-mpxf")
+
+	// 把 CVSS_V3 拿掉，強迫走第 2 層
+	var kept []Severity
+	for _, s := range adv.Severity {
+		if !strings.EqualFold(s.Type, "CVSS_V3") {
+			kept = append(kept, s)
+		}
+	}
+	adv.Severity = kept
+
+	sev := ResolveSeverity(adv)
+	if sev.Level != model.LevelMedium {
+		t.Fatalf("Severity.Level = %v，預期 MEDIUM（fixture 的 database_specific 是 "+
+			"{\"severity\":\"MODERATE\",\"github_reviewed\":true}）", sev.Level)
+	}
+	if sev.Source != model.SevSourceGHSA {
+		t.Errorf("Severity.Source = %q，預期 %q", sev.Source, model.SevSourceGHSA)
+	}
+	// 只剩 CVSS_V4 時，vector 原文仍要保留但不算分數
+	if sev.HasScore {
+		t.Error("只有 CVSS_V4 時不可算分數")
+	}
+	if sev.VectorType != "CVSS_V4" || sev.Vector == "" {
+		t.Errorf("CVSS_V4 的 vector 原文應保留：%+v", sev)
+	}
+}
+
+// TestSelectFixCandidatesNoteIsAccurate 是回歸測試：
+// Go / PyPI 有版本比較器，若回到「多個候選」是因為 ranges 沒有包含目前版本的
+// 區間（或版本字串無法解析），報表**不可**說成「未做版本比較」—— 那是在說謊，
+// 會讓使用者以為本工具對 Go 不支援版本比較。
+func TestSelectFixCandidatesNoteIsAccurate(t *testing.T) {
+	// stdlib 的 advisory 只涵蓋 1.21.x 與 1.22.x，拿 1.25.4 去比會找不到區間。
+	advs := loadAdvisories(t, filepath.Join("osv", "go_stdlib_v1.21.0.json"))
+	adv := advs[0]
+
+	fix := SelectFix(adv, model.EcosystemGo, "stdlib", "v1.25.4", model.ComparerFor(model.EcosystemGo))
+	if fix.Kind != model.FixKindCandidates {
+		t.Fatalf("Fix.Kind = %q，預期 candidates", fix.Kind)
+	}
+	disp := fix.Display()
+	if strings.Contains(disp, "未做版本比較") {
+		t.Errorf("Fix.Display() = %q —— Go 有版本比較器，不可說成「未做版本比較」", disp)
+	}
+	if !strings.Contains(disp, "沒有包含目前版本的區間") {
+		t.Errorf("Fix.Display() = %q，應說明真正的原因", disp)
+	}
+
+	// Maven 的情況才該說「不做版本比較」
+	mavenAdvs := loadAdvisories(t, filepath.Join("osv", "maven_log4j_2.14.1.json"))
+	mavenFix := SelectFix(mavenAdvs[0], model.EcosystemMaven,
+		"org.apache.logging.log4j:log4j-core", "2.14.1", nil)
+	if !strings.Contains(mavenFix.Display(), "不做版本比較") {
+		t.Errorf("Maven 的 Fix.Display() = %q，應說明不做版本比較", mavenFix.Display())
+	}
+}
+
+func TestCVEAliasesOf(t *testing.T) {
+	// 主 ID 本身是 CVE 時也要算進去
+	got := CVEAliasesOf("CVE-2024-9287", []string{"GHSA-abcd-1234-efgh", "cve-2024-9287", "CVE-2024-0001"})
+	if len(got) != 2 || got[0] != "CVE-2024-9287" || got[1] != "CVE-2024-0001" {
+		t.Fatalf("CVEAliasesOf = %v，預期去重且略過 GHSA", got)
+	}
+	if n := len(CVEAliasesOf("GO-2024-2687", nil)); n != 0 {
+		t.Errorf("沒有 CVE 別名時應回傳空，得到 %d 筆", n)
 	}
 }

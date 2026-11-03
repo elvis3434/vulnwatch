@@ -91,26 +91,48 @@ func qualitativeLevel(a Advisory) (model.Level, bool) {
 	return model.LevelUnknown, false
 }
 
+// levelFromDatabaseSpecific 取 database_specific.severity 的質性等級。
+//
+// 刻意逐鍵取值而不是解進具名結構：database_specific 的其他欄位型別不固定
+// （github_reviewed 是 bool、cwe_ids 是陣列、nvd_published_at 可能是 null），
+// 任何一個型別不符就會讓整個物件的解析回傳錯誤，進而讓第 2 層回退失效。
+// 詳見 types.go 結尾的說明。
 func levelFromDatabaseSpecific(raw json.RawMessage) (model.Level, bool) {
 	if len(raw) == 0 {
 		return model.LevelUnknown, false
 	}
-	var ds databaseSpecific
-	if err := json.Unmarshal(raw, &ds); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
 		return model.LevelUnknown, false
 	}
-	if strings.TrimSpace(ds.Severity) == "" {
+	rawSeverity, ok := fields["severity"]
+	if !ok {
 		return model.LevelUnknown, false
 	}
-	lvl, ok := model.ParseLevel(ds.Severity)
+	var s string
+	if err := json.Unmarshal(rawSeverity, &s); err != nil {
+		return model.LevelUnknown, false
+	}
+	if strings.TrimSpace(s) == "" {
+		return model.LevelUnknown, false
+	}
+	lvl, ok := model.ParseLevel(s)
 	if !ok || lvl == model.LevelUnknown {
 		return model.LevelUnknown, false
 	}
 	return lvl, true
 }
 
-// CVEAliases 回傳 aliases 中的 CVE 編號，供規劃 §3.2 第 3 層（NVD 補分數）使用。
+// CVEAliases 回傳 advisory 的 aliases 中的 CVE 編號，
+// 供規劃 §3.2 第 3 層（NVD 補分數）使用。
 func CVEAliases(a Advisory) []string {
+	return CVEAliasesOf(a.ID, a.Aliases)
+}
+
+// CVEAliasesOf 與 CVEAliases 相同，但直接吃 id 與 aliases。
+// internal/scan 在補分數時手上只有 model.Finding，不需要為了呼叫
+// CVEAliases 而組一個假的 Advisory。
+func CVEAliasesOf(id string, aliases []string) []string {
 	var out []string
 	seen := map[string]bool{}
 	add := func(s string) {
@@ -120,8 +142,8 @@ func CVEAliases(a Advisory) []string {
 			out = append(out, up)
 		}
 	}
-	add(a.ID)
-	for _, s := range a.Aliases {
+	add(id)
+	for _, s := range aliases {
 		add(s)
 	}
 	return out

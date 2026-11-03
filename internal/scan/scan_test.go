@@ -495,7 +495,7 @@ version   = "2.31.0"
 
 	found := false
 	for _, p := range rep.Problems {
-		if strings.Contains(p.Where, "html") || strings.Contains(p.Message, "設定檔") {
+		if p.Level == model.ProblemWarning && strings.Contains(p.Message, "html") {
 			found = true
 		}
 	}
@@ -526,6 +526,10 @@ version   = "2.14.1"
 	line := ResultLine(rep, h.cfg, 1)
 	if !strings.HasPrefix(line, "RESULT: 1 findings >= HIGH (exit 1)") {
 		t.Errorf("ResultLine = %q，格式應照規劃 §8", line)
+	}
+	// UNKNOWN 數量一律要附上，否則接監控的人會以為 exit 0 就是全無風險
+	if !strings.Contains(line, "unknown-severity") {
+		t.Errorf("ResultLine = %q，設了 fail_on 時也必須寫出 UNKNOWN 數量", line)
 	}
 }
 

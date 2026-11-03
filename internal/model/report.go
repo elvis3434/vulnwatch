@@ -64,16 +64,26 @@ type Fix struct {
 	Note       string   `json:"note,omitempty"`
 }
 
-// Display 回傳報表用的「最低安全版本」字串。
+// Display 回傳報表用的「最低安全版本」字串，能表達規劃 §3.3 要求的三種狀態：
+// 確定值、多個候選（未比較）、尚無修正版本。
+//
+// 「多個候選」的原因一律取自 Note，不可寫死成「未做版本比較」：
+// Go 與 PyPI 是**有**版本比較器的，它們回到候選狀態時的原因是
+// 「advisory 的 ranges 沒有包含目前版本的區間」或「版本字串無法解析」。
+// 寫死成「未做版本比較」會讓使用者誤以為本工具對 Go 不支援版本比較。
 func (f Fix) Display() string {
 	switch f.Kind {
 	case FixKindFixed:
 		return f.Version
 	case FixKindCandidates:
-		if len(f.Candidates) == 0 {
-			return "候選版本不明（未做版本比較）"
+		reason := strings.TrimSpace(f.Note)
+		if reason == "" {
+			reason = "未做版本比較，請自行確認對應的版本線"
 		}
-		return strings.Join(f.Candidates, " / ") + "（未做版本比較，請自行確認對應的版本線）"
+		if len(f.Candidates) == 0 {
+			return "候選版本不明（" + reason + "）"
+		}
+		return strings.Join(f.Candidates, " / ") + "（" + reason + "）"
 	case FixKindNone:
 		return "尚無修正版本"
 	default:

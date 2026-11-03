@@ -131,8 +131,12 @@ func writeFindings(b *strings.Builder, rep *model.Report) {
 
 func writeUnknown(b *strings.Builder, rep *model.Report) {
 	fmt.Fprintf(b, "## 3. 無嚴重度評級（UNKNOWN）\n\n")
-	fmt.Fprintf(b, "**這個區塊不受 min_severity 影響。** Go 官方 advisory（`GO-*`）與 RustSec 的項目"+
-		"一律沒有 CVSS 分數，會全部落在這裡 —— 不是次要區塊，請務必檢視。\n\n")
+	fmt.Fprintf(b, "**這個區塊不受 min_severity 影響，也不參與 fail_on 判定**"+
+		"（沒有分數可與門檻比較）—— 不是次要區塊，請務必檢視。\n\n")
+	fmt.Fprintf(b, "Go 官方 advisory（`GO-*`）與 RustSec 的項目本身沒有 CVSS 分數。"+
+		"若 `[sources].nvd = true` 且能用 advisory 的 alias CVE 向 NVD 取到分數，"+
+		"該項目會改以 NVD 的等級列在上面的需處理清單（來源欄位會顯示 `NVD`）；"+
+		"取不到分數的才留在這裡。\n\n")
 	if len(rep.Unknown) == 0 {
 		fmt.Fprintf(b, "沒有無評級的弱點。\n\n")
 		return
@@ -178,7 +182,8 @@ func writeFindingTable(b *strings.Builder, fs []model.Finding) {
 			fmt.Fprintf(b, "  - CVSS vector：`%s`%s\n", f.Severity.Vector, note)
 		}
 		fmt.Fprintf(b, "  - 最低安全版本：%s\n", f.Fix.Display())
-		if f.Fix.Note != "" {
+		// Display() 在候選狀態下已經把 Note 寫進去了，不要重複印。
+		if f.Fix.Note != "" && f.Fix.Kind != model.FixKindCandidates {
 			fmt.Fprintf(b, "  - 版本判定說明：%s\n", f.Fix.Note)
 		}
 		if f.Ignore != nil && f.Ignore.Expired {

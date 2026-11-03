@@ -103,8 +103,10 @@ func Run(ctx context.Context, opt Options) (*model.Report, error) {
 	}
 
 	// 設定檔的警告必須進報表的「錯誤 / 警告」區，不可靜默忽略（規劃 §3.4）。
+	// Where 放位置（檔名:行號 欄位）、Message 放訊息內容 —— 不可顛倒，
+	// 否則報表會印成「<整句警告>：設定檔警告」。
 	for _, w := range cfg.SortedWarnings() {
-		r.rep.AddProblem(model.ProblemWarning, w.String(), "設定檔警告")
+		r.rep.AddProblem(model.ProblemWarning, w.Location(), "%s", w.Msg)
 	}
 
 	r.scanPackages(ctx)
@@ -345,10 +347,7 @@ func (r *runner) limitations() []string {
 
 func (r *runner) fillSummary() {
 	s := model.Summary{ByLevel: map[string]int{}}
-	for _, lang := range r.rep.Languages {
-		_ = lang
-		s.Languages++
-	}
+	s.Languages = len(r.rep.Languages)
 	s.Packages = len(r.cfg.Packages)
 	s.Targets = s.Packages + s.Languages
 
@@ -400,10 +399,16 @@ func FailOnTriggered(rep *model.Report, cfg *config.Config) (bool, int) {
 
 // ResultLine 是 log 檔第一行要寫的結論（規劃 §8：設了 fail_on 之後，
 // log 第一行必須寫清楚，例如 "RESULT: 3 findings >= HIGH (exit 1)"）。
+//
+// UNKNOWN 的數量**一律**附在後面，即使設了 fail_on。
+// 原因：UNKNOWN 不參與 fail_on 判定（它沒有分數可與門檻比較，見
+// docs/decisions.md §4），所以有 12 筆無評級弱點時 exit code 仍然是 0。
+// 如果 log 第一行只寫 "0 findings >= HIGH (exit 0)"，接監控的人會誤判成全無風險。
 func ResultLine(rep *model.Report, cfg *config.Config, exitCode int) string {
 	if cfg.FailOnSet {
 		_, n := FailOnTriggered(rep, cfg)
-		return fmt.Sprintf("RESULT: %d findings >= %s (exit %d)", n, cfg.FailOnLevel.String(), exitCode)
+		return fmt.Sprintf("RESULT: %d findings >= %s (exit %d); %d unknown-severity（不參與 fail_on，請看報表）",
+			n, cfg.FailOnLevel.String(), exitCode, len(rep.Unknown))
 	}
 	return fmt.Sprintf("RESULT: %d findings, %d unknown-severity, fail_on 未設定 (exit %d)",
 		len(rep.Findings), len(rep.Unknown), exitCode)

@@ -141,7 +141,7 @@ func severityFromNVD(resp *nvdResponse, cveID string) (model.Severity, bool) {
 // 如果把它當成來源失敗，AllSourcesOK 幾乎永遠是 false，那麼 §5.1 的
 // 「優先選最近一次全來源成功的報表當基準」就永遠選不到基準，
 // 所有項目會一直停在「無法判定是否新增」。
-var ErrNoCVSSInNVD = errors.New("NVD 回應中沒有這筆 CVE 的 CVSS 資料")
+var ErrNoCVSSInNVD = errors.New("NVD 沒有這筆 CVE 的 CVSS 資料")
 
 // lookupCVE 查一個 CVE 的嚴重度。
 func (r *runner) lookupCVE(ctx context.Context, cveID string) (model.Severity, error) {
@@ -173,8 +173,7 @@ func (r *runner) lookupCVE(ctx context.Context, cveID string) (model.Severity, e
 	}
 	sev, ok := severityFromNVD(&out, cveID)
 	if !ok {
-		return model.Severity{}, fmt.Errorf("%w：%s（totalResults=%d）",
-			ErrNoCVSSInNVD, cveID, out.TotalResults)
+		return model.Severity{}, fmt.Errorf("%w（totalResults=%d）", ErrNoCVSSInNVD, out.TotalResults)
 	}
 	return sev, nil
 }
@@ -203,7 +202,7 @@ func (r *runner) fillSeverityFromNVD(ctx context.Context) {
 		if f.Severity.Level != model.LevelUnknown {
 			continue
 		}
-		for _, cve := range osv.CVEAliases(osv.Advisory{ID: f.ID, Aliases: f.Aliases}) {
+		for _, cve := range osv.CVEAliasesOf(f.ID, f.Aliases) {
 			need[cve] = append(need[cve], i)
 		}
 	}
@@ -241,7 +240,7 @@ func (r *runner) fillSeverityFromNVD(ctx context.Context) {
 			case errors.Is(err, ErrNoCVSSInNVD):
 				// 資料缺口，不是來源失敗（見 ErrNoCVSSInNVD 的說明）。
 				r.rep.AddProblem(model.ProblemWarning, NVDSourceName+" "+cve,
-					"NVD 沒有這筆 CVE 的 CVSS 資料，維持無嚴重度評級：%v", err)
+					"%v，維持無嚴重度評級", err)
 			default:
 				r.nvdStatus.OK = false
 				r.rep.AddProblem(model.ProblemWarning, NVDSourceName+" "+cve,

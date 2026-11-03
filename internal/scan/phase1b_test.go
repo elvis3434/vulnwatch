@@ -805,3 +805,75 @@ func writeBaseline(t *testing.T, reportDir string, rep *model.Report, stamp stri
 		t.Fatal(err)
 	}
 }
+
+// TestConfigWarningWhereAndMessageNotSwapped 是回歸測試：
+// 設定檔警告的 Where 必須是位置（檔名:行號 欄位）、Message 必須是訊息內容。
+// 曾經顛倒過，報表會印成「<整句警告>：設定檔警告」。
+func TestConfigWarningWhereAndMessageNotSwapped(t *testing.T) {
+	src := baseGeneral + `report_formats = ["md", "html"]
+
+[sources]
+nvd = false
+
+[[packages]]
+ecosystem = "PyPI"
+name      = "requests"
+version   = "2.31.0"
+`
+	h := newHarness(t, src, nil)
+	rep := h.run(t)
+
+	var p *model.Problem
+	for i := range rep.Problems {
+		if strings.Contains(rep.Problems[i].Message, "html") {
+			p = &rep.Problems[i]
+		}
+	}
+	if p == nil {
+		t.Fatalf("找不到 html 格式的警告：%+v", rep.Problems)
+	}
+	if p.Message == "設定檔警告" {
+		t.Error("Message 不可是「設定檔警告」這種標籤，必須是訊息內容")
+	}
+	if !strings.Contains(p.Where, "vulnwatch.toml:") {
+		t.Errorf("Where = %q，必須是「檔名:行號 欄位」形式", p.Where)
+	}
+	if !strings.Contains(p.Where, "general.report_formats") {
+		t.Errorf("Where = %q，應該含欄位名", p.Where)
+	}
+}
+
+// TestResultLineAlwaysReportsUnknownCount 是回歸測試：
+// UNKNOWN 不參與 fail_on，所以有無評級弱點時 exit code 仍是 0。
+// log 第一行（規劃 §8 要求寫清楚的那一行）必須寫出 UNKNOWN 數量，
+// 否則接監控的人會把 exit 0 誤判成全無風險。
+func TestResultLineAlwaysReportsUnknownCount(t *testing.T) {
+	src := baseGeneral + `fail_on = "HIGH"
+
+[sources]
+nvd = false
+
+[[packages]]
+ecosystem = "Go"
+name      = "golang.org/x/net"
+version   = "v0.20.0"
+`
+	h := newHarness(t, src, nil)
+	rep := h.run(t)
+
+	if len(rep.Unknown) == 0 {
+		t.Fatal("前置條件：應該有 UNKNOWN 項目")
+	}
+	triggered, _ := FailOnTriggered(rep, h.cfg)
+	if triggered {
+		t.Fatal("前置條件：UNKNOWN 不該觸發 fail_on")
+	}
+
+	line := ResultLine(rep, h.cfg, 0)
+	if !strings.Contains(line, "exit 0") {
+		t.Errorf("ResultLine = %q，應該是 exit 0", line)
+	}
+	if !strings.Contains(line, "1 unknown-severity") {
+		t.Errorf("ResultLine = %q，必須寫出 1 筆 UNKNOWN，否則 exit 0 會被誤判成全無風險", line)
+	}
+}

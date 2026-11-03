@@ -247,3 +247,73 @@ NVD 回應讀得到、但裡面沒有該 CVE 的 CVSS 資料（很多 CVE 本來
 報表第 4 節（語言執行環境狀態）只放 EOL / 版本落後的結論，
 弱點本身照規矩落在需處理清單或 UNKNOWN 區塊 —— 這樣 `GO-*` 才不會被
 「語言區塊」藏起來。
+
+---
+
+## 自我覆核後修掉的問題
+
+PR 送出後對整份實作再做一次覆核，找到並修掉以下幾項。前兩項是真的 bug，
+會讓規劃最在意的功能靜默失效。
+
+### F1. `database_specific` 的解析會讓第 2 層回退整個失效（真 bug）
+
+`databaseSpecific` 結構把 `github_reviewed` 宣告成 `string`，但它實際是 `bool`。
+`json.Unmarshal` 遇到型別不符會回傳 `UnmarshalTypeError`，而
+`levelFromDatabaseSpecific` 看到 `err != nil` 就直接回傳 UNKNOWN ——
+於是**凡是帶 `github_reviewed`（幾乎所有 GitHub reviewed 的 GHSA）又沒有
+`CVSS_V3` 的 advisory，第 2 層質性等級回退都會靜默失效**，全部掉到 UNKNOWN。
+
+這正是規劃 §3.2 要避免的那一類問題，只是發生在第 2 層而不是第 1 層。
+原本的測試沒抓到，因為用來測第 2 層的 advisory 是手寫的、沒有 `github_reviewed`；
+而 fixture 裡帶 `github_reviewed` 的那幾筆都有 `CVSS_V3`，走第 1 層就回傳了。
+
+修法：不再用具名結構解 `database_specific`，改成解進
+`map[string]json.RawMessage` 再單獨取 `severity`。這樣多出來的欄位、
+型別變動、未來新增的鍵都不會影響 severity 的讀取。
+加了兩個回歸測試（其中一個直接用 fixture 的 `database_specific` 形狀）。
+
+### F2. 報表會謊稱 Go / PyPI「未做版本比較」（真 bug）
+
+`Fix.Display()` 在 `FixKindCandidates` 時寫死輸出「未做版本比較，請自行確認
+對應的版本線」。但 Go 與 PyPI 是**有**版本比較器的，它們回到候選狀態的原因是
+「advisory 的 ranges 沒有包含目前版本的區間」或「版本字串無法解析」
+（見本文件 §5）。寫死那句話會讓使用者以為本工具對 Go 不支援版本比較，
+進而不相信其他 Go 項目的「最低安全版本」。
+
+修法：候選狀態的原因一律取自 `Fix.Note`（SelectFix 本來就填了準確的原因），
+只有 Note 為空時才用通用字串。Markdown 的細節區塊不再重複印 Note。
+
+### F3. 設定檔警告的位置與訊息顛倒
+
+`scan.Run` 把 `Diag.String()`（整句警告）放進 `Problem.Where`，
+把字串常數「設定檔警告」放進 `Problem.Message`，報表於是印成
+「<整句警告>：設定檔警告」。新增 `Diag.Location()` 回傳
+「檔名:行號 欄位」，Where / Message 各就各位。
+
+### F4. `RESULT:` 行在設了 `fail_on` 時會隱藏 UNKNOWN 數量
+
+UNKNOWN 不參與 `fail_on`（本文件 §4），所以有 12 筆無評級弱點時 exit code
+仍然是 0。但原本設了 `fail_on` 的 `RESULT:` 行只寫
+`0 findings >= HIGH (exit 0)`，接監控的人會把它讀成「全無風險」。
+
+修法：UNKNOWN 數量一律附在後面。規劃 §8 要求的那段文字維持原樣當前綴，
+只在後面加資訊，不改格式。
+
+### F5. UNKNOWN 區塊的說明在 NVD 補上分數後就不準確了
+
+原本寫「Go 官方 advisory 與 RustSec 的項目一律沒有 CVSS 分數，會全部落在這裡」。
+`[sources].nvd = true` 時第 3 層回退會把其中一部分搬到需處理清單，
+這句話就不成立。改成明確說明：取得 NVD 分數的會列在需處理清單（來源顯示 `NVD`），
+取不到的才留在這裡；並補上「本區塊也不參與 fail_on 判定」。
+
+### F6. `[[languages]].version` 的格式檢查會放過 `1.x`
+
+版本線與 patch 落後數都是從這個字串算出來的，猜錯比報錯糟。
+改成：第一段必須全是數字，其餘每段必須以數字開頭（仍接受 `1.82.0-beta`）。
+
+### F7. 兩處小整理
+
+- `osv.CVEAliasesOf(id, aliases)`：`internal/scan` 補分數時手上只有
+  `model.Finding`，原本要為了呼叫 `CVEAliases` 而組一個假的 `Advisory`。
+- `Fix.Note` 不再自己帶「（規劃 §3.3）」括號，否則被 `Display()` 包進
+  （）之後會變成巢狀括號；NVD 的資料缺口警告也不再重複同一句話。

@@ -82,11 +82,17 @@ type queryResponse struct {
 	Vulns []Advisory `json:"vulns"`
 }
 
-// databaseSpecific 只取本工具用得到的欄位。
-// GHSA 的 database_specific.severity 是 LOW/MODERATE/HIGH/CRITICAL 質性等級，
-// 是規劃 §3.2 第 2 層回退的來源。
-type databaseSpecific struct {
-	Severity     string `json:"severity,omitempty"`
-	GitHubSevery string `json:"github_reviewed,omitempty"`
-	ReviewStatus string `json:"review_status,omitempty"`
-}
+// database_specific 的解析刻意**不**用具名結構，而是在 severity.go 裡
+// 以 map[string]json.RawMessage 取出需要的鍵。
+//
+// 原因（這是修掉的一個真實 bug）：GHSA 的 database_specific 長這樣
+//
+//	{"cwe_ids":[...], "severity":"MODERATE", "github_reviewed":true, ...}
+//
+// 用具名結構時，只要有任何一個欄位的型別與宣告不符（例如把 bool 的
+// github_reviewed 宣告成 string），json.Unmarshal 就會回傳 UnmarshalTypeError。
+// 那時若把錯誤當成「無法解析」，整個 database_specific 都會被丟掉 ——
+// 於是所有沒有 CVSS_V3 的 GHSA 都會靜默掉到 UNKNOWN，等於第 2 層回退失效。
+//
+// 改成逐鍵取值之後，多出來的欄位、型別變動、未來新增的鍵都不會影響
+// severity 的讀取。

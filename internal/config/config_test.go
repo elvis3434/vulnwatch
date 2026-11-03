@@ -573,3 +573,48 @@ version   = "2.31.0"
 		t.Errorf("report_dir 與 cache_dir 都應該警告相對路徑（規劃 §8）：%+v", cfg.Warnings)
 	}
 }
+
+// TestLanguageVersionShapeValidation 是回歸測試：
+// 版本線與 patch 落後數都是從 [[languages]].version 算出來的，
+// 所以 1.x 這種寫法必須報錯，不可默默接受。
+func TestLanguageVersionShapeValidation(t *testing.T) {
+	good := []string{"1.27.3", "3.12.7", "1.82.0", "1.82", "1.27.3-rc1", "v1.27.3", "2"}
+	for _, v := range good {
+		if !looksLikeDottedVersion(v) {
+			t.Errorf("looksLikeDottedVersion(%q) = false，預期 true", v)
+		}
+	}
+	bad := []string{"", "latest", "1.x", "1.", ".1", "abc", "1.latest", "go1.27"}
+	for _, v := range bad {
+		if looksLikeDottedVersion(v) {
+			t.Errorf("looksLikeDottedVersion(%q) = true，預期 false", v)
+		}
+	}
+}
+
+func TestBadLanguageVersionReportsLine(t *testing.T) {
+	src := minimalGeneral + `
+[[languages]]
+name    = "go"
+version = "1.x"
+`
+	cerrs := parseErrors(t, src)
+	d := cerrs.Diags[0]
+	if d.Field != "languages.version" || d.Line != 8 {
+		t.Errorf("診斷 = %+v，預期 languages.version 第 8 行", d)
+	}
+}
+
+func TestDiagLocationSeparatesPositionFromMessage(t *testing.T) {
+	d := Diag{Path: "vulnwatch.toml", Line: 7, Field: "packages.ecosystem", Msg: "不支援的生態系"}
+	if got := d.Location(); got != "vulnwatch.toml:7 packages.ecosystem" {
+		t.Errorf("Location() = %q", got)
+	}
+	if got := d.String(); got != "vulnwatch.toml:7: packages.ecosystem: 不支援的生態系" {
+		t.Errorf("String() = %q", got)
+	}
+	// 沒有行號 / 欄位時也要可讀
+	if got := (Diag{Msg: "x"}).Location(); got != "設定檔" {
+		t.Errorf("Location() = %q", got)
+	}
+}

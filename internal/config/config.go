@@ -4,6 +4,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -159,6 +160,21 @@ type Diag struct {
 	Msg   string
 }
 
+// Location 回傳「檔名:行號 欄位」形式的位置字串，供報表的 Where 欄位使用。
+func (d Diag) Location() string {
+	loc := d.Path
+	if loc == "" {
+		loc = "設定檔"
+	}
+	if d.Line > 0 {
+		loc = fmt.Sprintf("%s:%d", loc, d.Line)
+	}
+	if d.Field != "" {
+		loc += " " + d.Field
+	}
+	return loc
+}
+
 func (d Diag) String() string {
 	loc := d.Path
 	if loc == "" {
@@ -235,7 +251,7 @@ func Parse(src []byte, path string) (*Config, error) {
 		Path: path,
 	}
 
-	dec := toml.NewDecoder(strings.NewReader(string(src)))
+	dec := toml.NewDecoder(bytes.NewReader(src))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(cfg); err != nil {
 		return nil, decodeErrors(err, display)
@@ -484,19 +500,28 @@ func validateLanguages(cfg *Config, v *validator) {
 	}
 }
 
+// looksLikeDottedVersion 檢查 [[languages]].version 是否像數字版本（1.27.3）。
+//
+// 規則：至少要有一段，第一段必須全是數字，其餘每段必須以數字開頭
+// （允許 1.82.0-beta 這類後綴）。刻意不接受 1.x、1.latest 這種寫法 ——
+// 版本線與 patch 落後數都是從這個字串算出來的，猜錯比報錯糟。
 func looksLikeDottedVersion(v string) bool {
 	s := strings.TrimPrefix(strings.TrimSpace(v), "v")
 	if s == "" {
 		return false
 	}
-	for _, seg := range strings.Split(s, ".") {
+	for i, seg := range strings.Split(s, ".") {
 		if seg == "" {
 			return false
 		}
-		for _, r := range seg {
-			if r < '0' || r > '9' {
-				// 允許 1.82.0-beta 這類後綴，只檢查第一段必須是數字。
-				return strings.IndexAny(s, "0123456789") == 0
+		if seg[0] < '0' || seg[0] > '9' {
+			return false
+		}
+		if i == 0 {
+			for _, r := range seg {
+				if r < '0' || r > '9' {
+					return false
+				}
 			}
 		}
 	}
