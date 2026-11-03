@@ -330,3 +330,36 @@ UNKNOWN 不參與 `fail_on`（本文件 §4），所以有 12 筆無評級弱點
 不會動到歷史報表目錄，也不會動到使用者自己放在 `report_dir` 的東西
 （與 §5.2 的清理原則一致）。`latest.html` 也列進去，這樣 Phase 2 之後
 從 html 改回 md/json 時同樣會清掉。
+
+---
+
+## Phase 2 的取捨：只做不需要網路的那一項
+
+使用者問要不要繼續做 Phase 2。結論是**只做 `crates.io` / `npm` 的版本比較**
+（規劃 §3.3 列為 Phase 2 的項目），其餘 Phase 2 工作全部留著。
+
+理由不是點數，而是 Phase 2 的兩根支柱在這個環境裡**無法驗證**：
+
+- **§4.2 的 NVD CPE 後處理**：規劃 §11 把
+  `configurations[].nodes[].cpeMatch[]` 的確切欄位名列為「實作時仍需確認」，
+  而 `services.nvd.nist.gov` 仍被網路政策封鎖。§4.2 的整個重點就是
+  「挑錯欄位就會誤報」（python 3.12.7 會查出 2009 年的 CVE 與 Django 的 CVE），
+  照猜的欄位名寫誤報過濾器，是最不該盲做的一段 —— 寫出來也無法證明它對，
+  而 §9 的第三個回歸案例正是在驗這件事。
+- **§4.3 的 RustSec**：要下載 advisory-db 的 tarball，同樣被封鎖。
+
+相對地，`crates.io` / `npm` 的版本比較是**純演算法**，不碰任何未驗證的 API 形狀，
+可以用 `httptest` 與自建的 advisory 完整驗證，而且範例設定檔裡的 `tokio`
+現在就吃這個虧（有弱點時只能列候選）。所以這一項做，其餘不做。
+
+### 實作方式
+
+`crates.io` 與 `npm` 都用標準 semver，直接複用 `golang.org/x/mod/semver`
+（白名單內的相依），不新增任何相依與 package。獨立成 `semverComparer` 而不是
+複用 `goComparer`，只是為了錯誤訊息好讀：Go 的版本字串本來就帶 `v` 前綴，
+其他生態系不帶，混在同一個型別裡訊息會很難懂。
+
+npm 的非 semver 歷史版本（例如 `1.0.0.1`）會讓 `Compare` 回傳 error，
+`SelectFix` 收到 error 就退回「列出全部候選」並標註「版本比較失敗」——
+與本文件 §5 的原則一致：挑不出區間時列候選，不猜。設定檔驗證對這類版本
+只發警告不報錯，因為它們是合法存在的 npm 版本。

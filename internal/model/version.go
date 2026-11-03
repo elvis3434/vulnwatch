@@ -52,7 +52,7 @@ type Comparer interface {
 // 規劃 §3.3 的 per-ecosystem 策略：
 //   - Go：用 golang.org/x/mod/semver（Phase 1a）
 //   - PyPI：PEP 440 簡化版自己寫（Phase 1a）
-//   - crates.io / npm：Phase 2
+//   - crates.io / npm：標準 semver（npm 的非 semver 版本會退回列出候選）
 //   - Maven / NuGet：不做比較，列出全部 fixed 版本並標註限制
 func ComparerFor(ecosystem string) Comparer {
 	switch ecosystem {
@@ -60,10 +60,61 @@ func ComparerFor(ecosystem string) Comparer {
 		return goComparer{}
 	case EcosystemPyPI:
 		return pypiComparer{}
+	case EcosystemCrates:
+		// Cargo 用標準 semver。
+		return semverComparer{label: "semver (Cargo)"}
+	case EcosystemNPM:
+		// npm 也是 semver，但歷史上存在少數非 semver 的版本號
+		// （規劃 §3.3 的註記）。那些版本會讓 Compare 回傳 error，
+		// SelectFix 收到 error 時會退回「列出全部候選」並標註原因，
+		// 不會猜錯升級方向。
+		return semverComparer{label: "semver (npm)"}
 	default:
-		// crates.io / npm 留到 Phase 2；Maven / NuGet 永遠不做（規劃 §3.3）。
+		// Maven / NuGet 永遠不做版本比較（規劃 §3.3）。
 		return nil
 	}
+}
+
+// semverComparer 用標準 semver 比較版本，給 crates.io 與 npm 使用。
+// 與 goComparer 的差別只在錯誤訊息的措辭：Go 的版本字串本來就帶 v 前綴，
+// 其他生態系不帶，混在同一個型別裡會讓錯誤訊息很難讀。
+type semverComparer struct {
+	label string
+}
+
+func (c semverComparer) Name() string { return c.label }
+
+func (c semverComparer) Compare(a, b string) (int, error) {
+	ca, err := canonicalSemver(a)
+	if err != nil {
+		return 0, err
+	}
+	cb, err := canonicalSemver(b)
+	if err != nil {
+		return 0, err
+	}
+	return semver.Compare(ca, cb), nil
+}
+
+// canonicalSemver 補上 golang.org/x/mod/semver 需要的 v 前綴並驗證格式。
+func canonicalSemver(v string) (string, error) {
+	s := strings.TrimSpace(v)
+	if s == "" {
+		return "", fmt.Errorf("版本為空")
+	}
+	if !strings.HasPrefix(s, "v") {
+		s = "v" + s
+	}
+	if !semver.IsValid(s) {
+		return "", fmt.Errorf("不是合法的 semver 版本: %q", v)
+	}
+	return s, nil
+}
+
+// IsValidSemverVersion 供設定檔驗證使用（crates.io / npm）。
+func IsValidSemverVersion(v string) bool {
+	_, err := canonicalSemver(v)
+	return err == nil
 }
 
 type goComparer struct{}

@@ -117,16 +117,74 @@ func TestGoComparer(t *testing.T) {
 }
 
 func TestComparerForEcosystems(t *testing.T) {
-	// 規劃 §3.3：Go 與 PyPI 做比較；Maven / NuGet 永遠不做；
-	// crates.io / npm 留到 Phase 2。
-	for _, eco := range []string{EcosystemGo, EcosystemPyPI} {
+	// 規劃 §3.3：Go、PyPI、crates.io、npm 做比較；Maven / NuGet 永遠不做。
+	for _, eco := range []string{EcosystemGo, EcosystemPyPI, EcosystemCrates, EcosystemNPM} {
 		if ComparerFor(eco) == nil {
 			t.Errorf("%s 應該有版本比較器", eco)
 		}
 	}
-	for _, eco := range []string{EcosystemMaven, EcosystemNuGet, EcosystemCrates, EcosystemNPM} {
+	for _, eco := range []string{EcosystemMaven, EcosystemNuGet} {
 		if ComparerFor(eco) != nil {
-			t.Errorf("%s 這個階段不該有版本比較器", eco)
+			t.Errorf("%s 永遠不做版本比較（規劃 §3.3）", eco)
+		}
+	}
+}
+
+func TestSemverComparer(t *testing.T) {
+	cmp := ComparerFor(EcosystemCrates)
+	ordered := []string{
+		"0.9.0", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-beta", "1.0.0-rc.1",
+		"1.0.0", "1.0.1", "1.2.0", "1.38.0", "2.0.0",
+	}
+	for i := 0; i+1 < len(ordered); i++ {
+		a, b := ordered[i], ordered[i+1]
+		c, err := cmp.Compare(a, b)
+		if err != nil {
+			t.Fatalf("Compare(%q, %q) 錯誤: %v", a, b, err)
+		}
+		if c != -1 {
+			t.Errorf("Compare(%q, %q) = %d，預期 -1", a, b, c)
+		}
+	}
+
+	// 不帶 v 前綴是常態，帶了也要能比
+	if c, err := cmp.Compare("1.38.0", "v1.38.0"); err != nil || c != 0 {
+		t.Errorf("Compare(1.38.0, v1.38.0) = %d, %v，預期 0", c, err)
+	}
+	// 補位：1.2 等同 1.2.0
+	if c, err := cmp.Compare("1.2", "1.2.0"); err != nil || c != 0 {
+		t.Errorf("Compare(1.2, 1.2.0) = %d, %v，預期 0", c, err)
+	}
+	// build metadata 不參與排序（semver 規格）
+	if c, err := cmp.Compare("1.0.0+build.1", "1.0.0+build.2"); err != nil || c != 0 {
+		t.Errorf("Compare 的 build metadata 不該影響排序：%d, %v", c, err)
+	}
+}
+
+// TestSemverComparerRejectsNonSemver 驗證 npm 的非 semver 版本會回傳 error，
+// 讓 SelectFix 退回「列出全部候選」而不是猜錯版本線（規劃 §3.3 的註記）。
+func TestSemverComparerRejectsNonSemver(t *testing.T) {
+	cmp := ComparerFor(EcosystemNPM)
+	for _, v := range []string{"", "latest", "1.0.0.1", "1.x", "abc", "~1.2.3", "^1.0.0"} {
+		if _, err := cmp.Compare(v, "1.0.0"); err == nil {
+			t.Errorf("Compare(%q, ...) 應該回傳錯誤", v)
+		}
+		if IsValidSemverVersion(v) {
+			t.Errorf("IsValidSemverVersion(%q) 應為 false", v)
+		}
+	}
+	for _, v := range []string{"1.0.0", "4.17.21", "1.0.0-beta.1", "17.0.0", "1.2"} {
+		if !IsValidSemverVersion(v) {
+			t.Errorf("IsValidSemverVersion(%q) 應為 true", v)
+		}
+	}
+}
+
+func TestComparerNames(t *testing.T) {
+	// 報表會標註採用了哪種版本比較規則，名稱不可為空
+	for _, eco := range []string{EcosystemGo, EcosystemPyPI, EcosystemCrates, EcosystemNPM} {
+		if n := ComparerFor(eco).Name(); n == "" {
+			t.Errorf("%s 的比較器沒有名稱", eco)
 		}
 	}
 }

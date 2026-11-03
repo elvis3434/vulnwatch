@@ -597,6 +597,17 @@ func validatePackages(cfg *Config, v *validator) {
 			if strings.HasPrefix(p.Version, "v") {
 				v.warnf(verLine, "packages.version", "PyPI 版本不需要 v 前綴（規劃 §3.1）")
 			}
+		case model.EcosystemCrates, model.EcosystemNPM:
+			if strings.HasPrefix(p.Version, "v") {
+				v.warnf(verLine, "packages.version", "%s 的版本通常不加 v 前綴（規劃 §3.1）", eco)
+			}
+			// npm 歷史上有少數非 semver 的版本號，所以這裡只警告不報錯：
+			// 比較失敗時「最低安全版本」會退回列出全部候選，不會猜錯方向。
+			if !model.IsValidSemverVersion(p.Version) {
+				v.warnf(verLine, "packages.version",
+					"%q 不是合法的 semver，無法判定該升到哪一段版本線，「最低安全版本」只會列出全部候選",
+					p.Version)
+			}
 		default:
 			if strings.HasPrefix(p.Version, "v") && eco != model.EcosystemGo {
 				v.warnf(verLine, "packages.version", "%s 的版本通常不加 v 前綴（規劃 §3.1）", eco)
@@ -604,16 +615,9 @@ func validatePackages(cfg *Config, v *validator) {
 		}
 
 		if model.ComparerFor(eco) == nil {
-			switch eco {
-			case model.EcosystemMaven, model.EcosystemNuGet:
-				v.warnf(entryLine, "packages.ecosystem",
-					"%s 不做版本比較（規劃 §3.3）：%s 的「最低安全版本」會列出全部候選，請自行確認對應的版本線",
-					eco, p.Name)
-			default:
-				v.warnf(entryLine, "packages.ecosystem",
-					"%s 的版本比較是 Phase 2 功能：%s 的「最低安全版本」會列出全部候選",
-					eco, p.Name)
-			}
+			v.warnf(entryLine, "packages.ecosystem",
+				"%s 不做版本比較（規劃 §3.3）：%s 的「最低安全版本」會列出全部候選，請自行確認對應的版本線",
+				eco, p.Name)
 		}
 	}
 }

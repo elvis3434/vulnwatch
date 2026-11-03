@@ -323,7 +323,7 @@ func (r *runner) limitations() []string {
 		"各弱點資料庫的覆蓋範圍不同，本報表不保證弱點清單完整。",
 		"UNKNOWN（無嚴重度評級）區塊不受 min_severity 影響，請務必一併檢視。",
 		"Maven / NuGet 不做版本比較，「最低安全版本」會列出全部候選，請自行確認對應的版本線。",
-		"crates.io / npm 的版本比較是 Phase 2 功能，目前同樣只列候選。",
+		"npm 歷史上有少數非 semver 的版本號，那些項目無法判定版本線，同樣只列候選。",
 		"只有 CVSS_V4 評分的項目不計算分數，只顯示 vector 原文。",
 		"KEV（是否已遭實際利用）、EPSS（被利用機率）與 deps.dev（最新版本）是 Phase 2 功能，本次未查詢。",
 	}

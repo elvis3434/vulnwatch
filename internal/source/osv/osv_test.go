@@ -476,3 +476,69 @@ func TestCVEAliasesOf(t *testing.T) {
 		t.Errorf("沒有 CVE 別名時應回傳空，得到 %d 筆", n)
 	}
 }
+
+// TestSelectFixCratesIoPicksVersionLine 驗證 crates.io 也能挑對版本線
+// （規劃 §3.3 的 Phase 2 項目）。結構與 urllib3 的回歸案例相同：
+// 多段 ranges，必須取包含目前版本的那一段。
+func TestSelectFixCratesIoPicksVersionLine(t *testing.T) {
+	adv := Advisory{
+		ID: "RUSTSEC-2024-0000",
+		Affected: []Affected{{
+			Package: Package{Ecosystem: model.EcosystemCrates, Name: "tokio"},
+			Ranges: []Range{{
+				Type: "SEMVER",
+				Events: []Event{
+					{Introduced: "0"},
+					{Fixed: "1.38.1"},
+					{Introduced: "2.0.0"},
+					{Fixed: "2.1.3"},
+				},
+			}},
+		}},
+	}
+	cmp := model.ComparerFor(model.EcosystemCrates)
+
+	cases := map[string]string{
+		"1.38.0": "1.38.1",
+		"0.9.0":  "1.38.1",
+		"2.0.0":  "2.1.3",
+		"2.1.2":  "2.1.3",
+	}
+	for version, want := range cases {
+		fix := SelectFix(adv, model.EcosystemCrates, "tokio", version, cmp)
+		if fix.Kind != model.FixKindFixed || fix.Version != want {
+			t.Errorf("tokio@%s → %+v，預期 fixed %s", version, fix, want)
+		}
+	}
+}
+
+// TestSelectFixNpmScopedPackage 驗證 npm 的 scoped 套件與非 semver 版本。
+func TestSelectFixNpmScopedPackage(t *testing.T) {
+	adv := Advisory{
+		ID: "GHSA-npm-test",
+		Affected: []Affected{{
+			Package: Package{Ecosystem: model.EcosystemNPM, Name: "@angular/core"},
+			Ranges: []Range{{
+				Type:   "SEMVER",
+				Events: []Event{{Introduced: "0"}, {Fixed: "17.3.11"}},
+			}},
+		}},
+	}
+	cmp := model.ComparerFor(model.EcosystemNPM)
+
+	if fix := SelectFix(adv, model.EcosystemNPM, "@angular/core", "17.0.0", cmp); fix.Version != "17.3.11" {
+		t.Errorf("scoped 套件的版本線挑選失敗：%+v", fix)
+	}
+
+	// 非 semver 的歷史版本：必須退回候選並說明原因，不可猜
+	fix := SelectFix(adv, model.EcosystemNPM, "@angular/core", "1.0.0.1", cmp)
+	if fix.Kind != model.FixKindCandidates {
+		t.Fatalf("非 semver 版本應退回候選，實際 %+v", fix)
+	}
+	if !strings.Contains(fix.Note, "版本比較失敗") {
+		t.Errorf("Fix.Note = %q，應說明版本比較失敗", fix.Note)
+	}
+	if strings.Contains(fix.Display(), "未做版本比較") {
+		t.Errorf("Fix.Display() = %q —— npm 有比較器，原因不是「未做版本比較」", fix.Display())
+	}
+}
