@@ -1,0 +1,21 @@
+# 編譯產物
+/vulnwatch
+/vulnwatch.exe
+/dist/
+
+# 執行期產出（正式部署一律用設定檔的絕對路徑，這裡只是防手滑）
+/reports/
+/cache/
+/logs/
+
+# 使用者自己的設定檔；範例檔是 vulnwatch.example.toml，要進版控
+/vulnwatch.toml
+
+# 規劃文件的舊版備份
+*.bak.md
+
+# 編輯器 / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
