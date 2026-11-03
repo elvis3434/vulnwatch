@@ -48,7 +48,7 @@ func TestCVSS31BaseScoreBadInput(t *testing.T) {
 	for _, v := range []string{
 		"",
 		"not-a-vector",
-		"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H", // 缺 S
+		"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H",     // 缺 S
 		"CVSS:3.1/AV:X/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", // AV 值無效
 	} {
 		if _, err := CVSS31BaseScore(v); err == nil {

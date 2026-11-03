@@ -1,0 +1,88 @@
+# 規劃 §9 的驗收項目：
+#   go test ./...、go vet ./... 通過；Windows amd64 可交叉編譯；
+#   CI 另跑 govulncheck（本工具自己也是供應鏈的一環，所以也要被掃）
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "以下檔案未格式化，請跑 gofmt -w：" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # live 標籤的錄製測試平常不編譯，但它們也要能編譯過，
+      # 否則只有在有網路時才會發現它們壞了。
+      - name: go vet（含 live 標籤）
+        run: go vet -tags=live ./...
+
+      # 規劃 §6：go test ./... 絕不可打真實網路。
+      # 這裡把 proxy 指到一個連不上的位址，任何真實請求都會失敗，
+      # 所以這一步同時也是「測試沒有偷打網路」的回歸測試。
+      - name: go test（無網路）
+        env:
+          HTTPS_PROXY: http://127.0.0.1:1
+          HTTP_PROXY: http://127.0.0.1:1
+          NO_PROXY: 127.0.0.1
+        run: go test -race -count=1 ./...
+
+      - name: 交叉編譯 Windows amd64
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: go build -o vulnwatch.exe ./cmd/vulnwatch
+
+      # 規劃 §6 的相依白名單：只允許 go-toml/v2 與 x/mod/semver。
+      - name: 檢查相依白名單
+        run: |
+          unexpected="$(go list -deps ./... \
+            | grep -E '^(github\.com|golang\.org|gopkg\.in)/' \
+            | grep -v '^github\.com/elvis3434/vulnwatch' \
+            | grep -vE '^github\.com/pelletier/go-toml/v2(/|$)' \
+            | grep -vE '^golang\.org/x/mod/semver$' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "出現白名單之外的相依（規劃 §6）：" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+          echo "相依白名單檢查通過"
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      # govulncheck 會在執行時向 vuln.go.dev 取最新的弱點資料庫，
+      # 所以這個 job 需要網路。用 @latest 取最新的掃描器；
+      # 資料庫本來就是執行時抓的，固定掃描器版本不會讓結果更新。
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
