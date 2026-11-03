@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.2.0",
+  "result": {
+    "name": "rust",
+    "label": "Rust",
+    "category": "lang",
+    "releases": [
+      {
+        "name": "1.90",
+        "isEol": false,
+        "isMaintained": true,
+        "eolFrom": null,
+        "latest": {"name": "1.90.0", "date": "2026-09-18", "link": "https://github.com/rust-lang/rust/releases/tag/1.90.0"}
+      },
+      {
+        "name": "1.82",
+        "isEol": false,
+        "isMaintained": false,
+        "eolFrom": null,
+        "latest": {"name": "1.82.0", "date": "2024-10-17", "link": "https://github.com/rust-lang/rust/releases/tag/1.82.0"}
+      }
+    ]
+  }
+}

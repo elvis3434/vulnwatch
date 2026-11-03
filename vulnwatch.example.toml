@@ -1,0 +1,93 @@
+# vulnwatch 設定檔範例
+#
+# 複製成 vulnwatch.toml 後修改。正式部署（Windows 工作排程器）一律使用絕對路徑：
+# 排程器的工作目錄不一定是執行檔所在目錄。
+#
+# 驗證設定檔：vulnwatch check -c vulnwatch.toml
+
+# ========== 一般設定 ==========
+[general]
+report_dir      = 'D:\vulnwatch\reports'   # Windows 路徑請用單引號（literal string）避免跳脫
+cache_dir       = 'D:\vulnwatch\cache'
+log_file        = 'D:\vulnwatch\logs\vulnwatch.log'
+timezone        = "Asia/Taipei"            # 工具內建 tzdata，Windows 上也能用
+report_formats  = ["md", "json"]           # Phase 1 只支援 md/json；填 html 會收到明確 warning
+keep_reports    = 30          # 保留最近 N 份報表，舊的自動刪除（0 = 不清理）
+min_severity    = "LOW"       # LOW / MEDIUM / HIGH / CRITICAL
+                              # 注意：UNKNOWN（無評級）不受此設定影響，一律列入獨立區塊
+fail_on         = ""          # 預設空字串 = 永遠 exit 0，由報表負責告知
+                              # 填 "HIGH" 則發現 >= HIGH 時 exit 1
+                              # （排程器會把 exit 1 顯示成「上次執行結果 0x1」，看起來像程式壞了）
+http_timeout    = "30s"
+cache_ttl       = "12h"
+
+[network]
+# 公司網路若需代理，填這裡；留空則讀取系統環境變數 HTTPS_PROXY
+proxy   = ""
+# 公司網路做 TLS 攔截時，填自簽 CA 憑證路徑（會加入系統 cert pool）
+# 不提供停用憑證驗證的選項
+ca_file = ""
+
+[sources]
+osv      = true
+nvd      = true     # 用來替沒有 CVSS 的 advisory 以 alias CVE 補分數
+rustsec  = true     # Rust 工具鏈 / std（Phase 2）
+eol      = true
+deps_dev = true     # 套件最新版本（Phase 2）
+kev      = true     # 是否已遭實際利用（Phase 2）
+epss     = true     # 被利用機率（Phase 2）
+# 金鑰不要寫在設定檔，從環境變數讀取：
+#   VULNWATCH_NVD_API_KEY
+
+# ========== 程式語言 / 執行環境 ==========
+[[languages]]
+name    = "go"
+version = "1.27.3"        # 實際使用的版本（可用 `go version` 確認）
+
+[[languages]]
+name    = "rust"
+version = "1.82.0"
+
+[[languages]]
+name    = "python"
+version = "3.12.7"
+
+# ========== 第三方套件 ==========
+[[packages]]
+ecosystem = "Go"
+name      = "github.com/gin-gonic/gin"
+version   = "v1.9.1"
+note      = "交易 API 閘道"          # 選填，顯示在報表
+
+[[packages]]
+ecosystem = "crates.io"
+name      = "tokio"
+version   = "1.38.0"
+
+[[packages]]
+ecosystem = "PyPI"
+name      = "requests"
+version   = "2.31.0"
+
+[[packages]]
+purl = "pkg:golang/golang.org/x/net@v0.20.0"
+
+# ========== 從專案相依檔自動匯入（選用，Phase 3） ==========
+#[[manifests]]
+#path = 'D:\src\par_ses\go.mod'
+#
+#[[manifests]]
+#path = 'D:\src\myrust\Cargo.lock'
+#
+#[[manifests]]
+#path = 'D:\src\pytool\requirements.txt'
+
+# ========== 忽略清單（已評估可接受的風險） ==========
+[[ignore]]
+id        = "GO-2024-0000"
+ecosystem = "Go"                            # 選填；省略 = 對所有套件忽略此 ID
+name      = "golang.org/x/net"              # 選填；同一個 CVE 可能影響多個套件，
+                                            # 而「未使用受影響的函式」是針對特定套件的評估
+reason    = "未使用受影響的函式"
+expires   = "2026-12-31"                    # 字串格式 YYYY-MM-DD
+                                            # 到期後自動恢復列入報表，避免永久忽略

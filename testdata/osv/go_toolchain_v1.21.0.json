@@ -1,0 +1,26 @@
+{
+  "vulns": [
+    {
+      "id": "GO-2024-2611",
+      "summary": "Arbitrary code execution during build on Windows in cmd/go",
+      "modified": "2024-03-06T17:15:00Z",
+      "aliases": ["CVE-2024-24783"],
+      "severity": null,
+      "database_specific": {
+        "url": "https://pkg.go.dev/vuln/GO-2024-2611",
+        "review_status": "REVIEWED"
+      },
+      "affected": [
+        {
+          "package": {"ecosystem": "Go", "name": "toolchain"},
+          "ranges": [
+            {"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "1.21.8"}]}
+          ]
+        }
+      ],
+      "references": [
+        {"type": "ADVISORY", "url": "https://pkg.go.dev/vuln/GO-2024-2611"}
+      ]
+    }
+  ]
+}

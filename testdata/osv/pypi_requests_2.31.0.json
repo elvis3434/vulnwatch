@@ -1,0 +1,25 @@
+{
+  "vulns": [
+    {
+      "id": "GHSA-9hjg-9r4m-mvj7",
+      "summary": "Requests vulnerable to .netrc credentials leak via malicious URLs",
+      "modified": "2024-12-20T05:22:11Z",
+      "aliases": ["CVE-2024-47081"],
+      "severity": [
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"}
+      ],
+      "database_specific": {"severity": "MODERATE", "github_reviewed": true},
+      "affected": [
+        {
+          "package": {"ecosystem": "PyPI", "name": "requests"},
+          "ranges": [
+            {"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.32.4"}]}
+          ]
+        }
+      ],
+      "references": [
+        {"type": "ADVISORY", "url": "https://github.com/psf/requests/security/advisories/GHSA-9hjg-9r4m-mvj7"}
+      ]
+    }
+  ]
+}

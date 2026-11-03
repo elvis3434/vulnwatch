@@ -1,0 +1,67 @@
+{
+  "vulns": [
+    {
+      "id": "GHSA-34jh-p97f-mpxf",
+      "summary": "urllib3's Proxy-Authorization request header isn't stripped during cross-origin redirects",
+      "modified": "2024-06-18T10:12:03Z",
+      "published": "2024-06-17T18:30:21Z",
+      "aliases": ["CVE-2024-37891"],
+      "severity": [
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:N/A:N"},
+        {"type": "CVSS_V4", "score": "CVSS:4.0/AV:N/AC:H/AT:N/PR:L/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N"}
+      ],
+      "database_specific": {"severity": "MODERATE", "github_reviewed": true},
+      "affected": [
+        {
+          "package": {"ecosystem": "PyPI", "name": "urllib3", "purl": "pkg:pypi/urllib3"},
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {"introduced": "0"},
+                {"fixed": "1.26.19"},
+                {"introduced": "2.0.0"},
+                {"fixed": "2.2.2"}
+              ]
+            }
+          ],
+          "versions": ["1.26.0", "1.26.5", "1.26.18", "2.0.0", "2.2.1"],
+          "database_specific": {"source": "https://github.com/pypa/advisory-database"}
+        }
+      ],
+      "references": [
+        {"type": "ADVISORY", "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf"},
+        {"type": "WEB", "url": "https://github.com/urllib3/urllib3/commit/accff72ecc2f6cf5a76d9570198a93ac7c90270e"}
+      ]
+    },
+    {
+      "id": "GHSA-g4mx-q9vg-27p4",
+      "summary": "urllib3 does not remove the Authorization HTTP header when following a cross-origin redirect",
+      "modified": "2023-10-18T09:00:00Z",
+      "aliases": ["CVE-2023-45803"],
+      "severity": [
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"}
+      ],
+      "database_specific": {"severity": "MODERATE"},
+      "affected": [
+        {
+          "package": {"ecosystem": "PyPI", "name": "urllib3"},
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {"introduced": "0"},
+                {"fixed": "1.26.18"},
+                {"introduced": "2.0.0"},
+                {"fixed": "2.0.7"}
+              ]
+            }
+          ]
+        }
+      ],
+      "references": [
+        {"type": "ADVISORY", "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-g4mx-q9vg-27p4"}
+      ]
+    }
+  ]
+}

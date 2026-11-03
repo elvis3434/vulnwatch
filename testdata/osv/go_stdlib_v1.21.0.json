@@ -1,0 +1,26 @@
+{
+  "vulns": [
+    {
+      "id": "GO-2024-2600",
+      "summary": "Incorrect forwarding of sensitive headers and cookies on HTTP redirect in net/http",
+      "modified": "2024-02-08T18:12:03Z",
+      "aliases": ["CVE-2023-45289"],
+      "severity": null,
+      "database_specific": {
+        "url": "https://pkg.go.dev/vuln/GO-2024-2600",
+        "review_status": "REVIEWED"
+      },
+      "affected": [
+        {
+          "package": {"ecosystem": "Go", "name": "stdlib"},
+          "ranges": [
+            {"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "1.21.8"}, {"introduced": "1.22.0-0"}, {"fixed": "1.22.1"}]}
+          ]
+        }
+      ],
+      "references": [
+        {"type": "ADVISORY", "url": "https://pkg.go.dev/vuln/GO-2024-2600"}
+      ]
+    }
+  ]
+}
