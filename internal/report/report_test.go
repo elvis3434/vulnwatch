@@ -410,3 +410,61 @@ func mustWrite(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+// TestWritePrunesStaleLatest 是回歸測試：
+// 使用者把 report_formats 從 ["md","json"] 改成 ["json"] 之後，
+// 舊的 latest.md 不可留在原地 —— 它看起來是最新報表，其實是上一次的結果。
+// 對弱點掃描工具來說，這種過期檔案比沒有檔案危險得多。
+func TestWritePrunesStaleLatest(t *testing.T) {
+	dir := t.TempDir()
+
+	// 第一次：md + json
+	first := sampleReport()
+	if _, err := Write(first, dir, []string{"md", "json"}, time.Date(2026, 11, 2, 8, 30, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "latest.md")); err != nil {
+		t.Fatalf("前置條件：latest.md 應該存在: %v", err)
+	}
+
+	// 第二次：只有 json
+	if _, err := Write(sampleReport(), dir, []string{"json"}, time.Date(2026, 11, 3, 8, 30, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "latest.md")); err == nil {
+		t.Error("latest.md 是上一次的結果，必須移除，不可留下過期的「最新報表」")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "latest.json")); err != nil {
+		t.Errorf("latest.json 應該存在: %v", err)
+	}
+
+	// 歷史報表目錄不受影響：舊的那一份 report.md 仍在
+	if _, err := os.Stat(filepath.Join(dir, "2026-11-02_0830", "report.md")); err != nil {
+		t.Errorf("歷史報表不可被動到: %v", err)
+	}
+
+	// 改回 md + json 時 latest.md 要回來
+	if _, err := Write(sampleReport(), dir, []string{"md", "json"}, time.Date(2026, 11, 4, 8, 30, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "latest.md")); err != nil {
+		t.Errorf("latest.md 應該重新產生: %v", err)
+	}
+}
+
+func TestPruneStaleLatestIgnoresOtherFiles(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "我的筆記.txt"), "重要")
+	mustWrite(t, filepath.Join(dir, "latest.md"), "舊的")
+
+	removed, err := pruneStaleLatest(dir, []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 || removed[0] != "latest.md" {
+		t.Errorf("removed = %v，預期只移除 latest.md", removed)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "我的筆記.txt")); err != nil {
+		t.Error("不可動到使用者自己的檔案")
+	}
+}

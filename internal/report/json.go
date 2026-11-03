@@ -48,6 +48,14 @@ func Write(rep *model.Report, reportDir string, formats []string, at time.Time) 
 		return nil, fmt.Errorf("建立報表目錄 %s 失敗: %w", dir, err)
 	}
 
+	// 這次不產生的格式，要把舊的 latest.<fmt> 移掉。
+	// 否則使用者把 report_formats 從 ["md","json"] 改成 ["json"] 之後，
+	// 舊的 latest.md 會留在原地 —— 它看起來是最新報表，其實是上一次的結果。
+	// 對一個弱點掃描工具來說，這種過期檔案比沒有檔案危險得多。
+	if _, err := pruneStaleLatest(reportDir, formats); err != nil {
+		return nil, err
+	}
+
 	var written []string
 	for _, f := range formats {
 		switch f {
@@ -130,5 +138,42 @@ func Cleanup(reportDir string, keep int) ([]string, error) {
 		}
 		removed = append(removed, name)
 	}
+	return removed, nil
+}
+
+// latestFiles 是各格式對應的 latest 檔名。
+var latestFiles = map[string]string{
+	"md":   "latest.md",
+	"json": "latest.json",
+	// html 是 Phase 2；先列在這裡，這樣從 html 改回 md/json 時
+	// 舊的 latest.html 也會被清掉。
+	"html": "latest.html",
+}
+
+// pruneStaleLatest 移除「這次不產生的格式」留下的舊 latest 檔。
+// 回傳被移除的檔名。
+func pruneStaleLatest(reportDir string, formats []string) ([]string, error) {
+	keep := make(map[string]bool, len(formats))
+	for _, f := range formats {
+		if name, ok := latestFiles[f]; ok {
+			keep[name] = true
+		}
+	}
+
+	var removed []string
+	for _, name := range latestFiles {
+		if keep[name] {
+			continue
+		}
+		p := filepath.Join(reportDir, name)
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if err := os.Remove(p); err != nil {
+			return removed, fmt.Errorf("移除過期的 %s 失敗: %w", p, err)
+		}
+		removed = append(removed, name)
+	}
+	sort.Strings(removed)
 	return removed, nil
 }

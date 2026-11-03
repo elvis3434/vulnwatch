@@ -317,3 +317,16 @@ UNKNOWN 不參與 `fail_on`（本文件 §4），所以有 12 筆無評級弱點
   `model.Finding`，原本要為了呼叫 `CVEAliases` 而組一個假的 `Advisory`。
 - `Fix.Note` 不再自己帶「（規劃 §3.3）」括號，否則被 `Display()` 包進
   （）之後會變成巢狀括號；NVD 的資料缺口警告也不再重複同一句話。
+
+### F8. `report_formats` 改小之後，舊的 `latest.<fmt>` 會變成誤導檔案
+
+把 `report_formats` 從 `["md","json"]` 改成 `["json"]` 之後，上一次產生的
+`latest.md` 會留在 `report_dir` 下。它的檔名表示「最新報表」，內容卻是上一次
+掃描的結果 —— 對弱點掃描工具來說，這種過期檔案比沒有檔案危險得多：
+使用者可能照著一份舊名單做處置。
+
+修法：`report.Write` 在寫入前先移除「這次不產生的格式」對應的 `latest.<fmt>`。
+只碰 `latest.md` / `latest.json` / `latest.html` 這三個固定檔名，
+不會動到歷史報表目錄，也不會動到使用者自己放在 `report_dir` 的東西
+（與 §5.2 的清理原則一致）。`latest.html` 也列進去，這樣 Phase 2 之後
+從 html 改回 md/json 時同樣會清掉。
