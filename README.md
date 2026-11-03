@@ -53,3 +53,7 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/vulnwatch
 需要的環境變數：
 
 - `VULNWATCH_NVD_API_KEY`（選用，大幅提高 NVD 速率限制）
+
+## 授權
+
+MIT，見 [LICENSE](LICENSE)。
